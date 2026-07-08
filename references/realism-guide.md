@@ -79,3 +79,6 @@ diffable data, reproducible bugs.
   transaction.
 - The unseed script deletes by the marker (email domain, slug prefix, tag
   column) child-tables-first — and prints what it deleted.
+- The wipe is **proven, not promised**: Step 6 runs it for real against a
+  one-row-per-table skeleton and checks that counts return to the
+  pre-seed baseline before any mass insert happens.

@@ -24,14 +24,20 @@ log in with, what is the password, and what role does it have?**
 1. **Frame + production gate** — resolves the actual DB connection, prints
    host/database/environment, and requires explicit confirmation before
    writing. Suspicious production-looking targets are refused or require the
-   user to type the database name back.
-2. **Schema census** — reads migrations, ORM models, and live DB
-   introspection to map tables, constraints, enum values, media columns, and
-   foreign-key dependency order. Schema facts are cited with `file:line` or
-   introspection output.
+   user to type the database name back. The gate is checked again at run
+   time: the live connection's own identity must match what was confirmed,
+   or nothing runs.
+2. **Schema census** — answers a fixed census-question list from migrations,
+   ORM models, and live DB introspection: tables, constraints, enum values,
+   media columns, foreign-key dependency order, and what fires on insert
+   (observers, triggers, queued jobs). Schema facts are cited with
+   `file:line` or introspection output; unknowns become transactional
+   probes, never guesses.
 3. **Realism plan** — decides per-table shapes: locale-correct fake
    identities, spread timestamps, uneven production-like distributions,
    status coverage, rich accounts, empty accounts, and deliberate edge cases.
+   Ends with a compact Seed Brief (target, row counts, marker, accounts)
+   confirmed by the user before any script is written.
 4. **Seed + unseed scripts** — writes the stack's own seeding mechanism
    (Laravel seeders, Prisma seed, Django management command, Rails seeds,
    Symfony fixtures, or plain SQL only as a last resort), deterministic and
@@ -40,9 +46,11 @@ log in with, what is the password, and what role does it have?**
    for image/file fields at the sizes the app expects. AI image generation is
    used when available; deterministic avatars/covers are the fallback. No real
    people, no scraped images.
-6. **Run + verify** — seeds the DB, checks row counts and FK integrity, tests
-   every demo login through the app's real auth, and spot-renders major
-   screens.
+6. **Run + verify** — re-checks the live target, records a pre-seed
+   baseline, seeds a one-row walking skeleton per table, then runs the wipe
+   for real and proves counts return to baseline — only then mass-seeds and
+   checks row counts, FK integrity, every demo login through the app's real
+   auth, and spot-renders major screens.
 7. **Manifest** — writes `SEED_MANIFEST.md`: seeded counts, shape notes,
    image inventory, re-seed/wipe commands, and the demo accounts table with
    username/email, password, role, and what each account is good for demoing.
@@ -65,9 +73,12 @@ through the app's own hasher.
 ## Safety guarantees
 
 - **No production writes without confirmation.** The target DB is shown before
-  any mutation.
-- **Wipeable by construction.** Seeded rows use a deterministic marker such as
-  `@demo.example`, `demo-` slugs, or a seed-run tag column.
+  any mutation and its live identity is re-verified at run time. Headless
+  runs write scripts but never execute the seed.
+- **Wipeable by construction — and proven.** Seeded rows use a deterministic
+  marker such as `@demo.example`, `demo-` slugs, or a seed-run tag column;
+  the marker must match zero pre-existing rows, and the wipe round-trip is
+  demonstrated on a one-row skeleton before any mass insert.
 - **No real people or customer data.** Names, emails, images, and attachments
   are fake and safe for public screenshots.
 - **Framework-native.** Seeds go through the app's model/factory layer where

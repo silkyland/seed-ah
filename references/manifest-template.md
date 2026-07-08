@@ -17,8 +17,12 @@ summary the user asked for, in one place, current after every seed run.
 
 ## Target
 
-- Database: `<name>` on `<host>` (<env> — production gate confirmed <date>)
+- Database: `<name>` on `<host>` (<env> — production gate confirmed
+  <date>, live identity re-checked at run time)
 - Marker for seeded rows: `<email domain / slug prefix / tag column>`
+  (matched 0 pre-existing rows before seeding)
+- Wipe round-trip: proven <date> — one-row skeleton seeded, wiped, all
+  counts returned to baseline before the mass seed
 
 ## Demo accounts
 
@@ -65,7 +69,8 @@ above was login-tested on <date>.
 ## Drift & findings
 
 <Anything the census surfaced: migration/DB drift, validation stricter
-than schema, lookup tables owned elsewhere — with file:line.>
+than schema, lookup tables owned elsewhere, insert-time side effects
+muted or accepted (observers, triggers, queued jobs) — with file:line.>
 ```
 
 ---

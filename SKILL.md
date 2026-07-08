@@ -40,11 +40,21 @@ documented in a manifest that tells you exactly who the demo users are.
    the user, and require explicit confirmation. Names that smell like
    production (`prod`, a public host, a managed-DB hostname) require the
    user to type the database name back. When in doubt, refuse and suggest
-   a local copy.
-2. **Wipeable by construction** — seeded rows are identifiable (a
-   deterministic marker: known email domain like `@demo.example`, a
-   `demo_` slug prefix, or a seed-run tag column where one exists) and an
-   **unseed script** ships alongside the seed script.
+   a local copy. The gate is checked TWICE: once here, and again at run
+   time — immediately before executing, query the live connection for its
+   own identity (`SELECT DATABASE()` / `current_database()` /
+   `PRAGMA database_list`) and compare host + database name against what
+   the user confirmed. Any mismatch = abort, zero rows written. If no
+   user can respond (headless run), the gate cannot pass — write the
+   scripts and stop; never execute a seed unattended.
+2. **Wipeable by construction — and proven, not promised** — seeded rows
+   are identifiable (a deterministic marker: known email domain like
+   `@demo.example`, a `demo_` slug prefix, or a seed-run tag column where
+   one exists) and an **unseed script** ships alongside the seed script.
+   Before mass seeding, the marker must match **zero** existing rows
+   (query it — a marker that overlaps real data turns the wipe into a
+   data-loss tool), and the wipe round-trip in Step 6 must pass on a
+   one-row skeleton.
 3. **Demo passwords are demo** — obviously fake, unique to this seed
    (never a real credential, never reused from anywhere), hashed through
    the app's OWN hasher (`file:line` of the hashing call/config). Policy-
@@ -60,11 +70,11 @@ Copy this into your response and check items off:
 ```
 Seed-ah Progress:
 - [ ] Step 1: Frame — target env confirmed ⛔, volume, locale, purpose
-- [ ] Step 2: Schema census — tables, constraints, FK graph, seed order
-- [ ] Step 3: Realism plan — per-table shape, distributions, edge cases
-- [ ] Step 4: Seed scripts — framework-native, committed, idempotent
+- [ ] Step 2: Schema census — Census Questions answered with evidence, FK graph, seed order
+- [ ] Step 3: Realism plan — per-table shape, distributions, edge cases; Seed Brief confirmed
+- [ ] Step 4: Seed scripts — framework-native, committed, idempotent, side effects muted or accepted
 - [ ] Step 5: Images — generated for every image field, correct sizes
-- [ ] Step 6: Run + verify — counts, FK integrity, demo logins tested
+- [ ] Step 6: Run + verify — target re-checked ⛔, skeleton + wipe round-trip proven, then mass seed, demo logins tested
 - [ ] Step 7: Manifest — what was seeded + demo accounts (user/pass/role)
 ```
 
@@ -88,6 +98,15 @@ before children), and every constraint that can reject a row (NOT NULL,
 UNIQUE, CHECK, enum values). Note which tables the app writes vs
 reference/lookup tables that may already be populated.
 
+The census exists to answer the numbered **Census Questions** in that
+reference — constraints, FK order, what fires on insert, what already
+lives in the target — before a single row is invented. Every answer
+carries evidence (`file:line` or pasted introspection output). A question
+you cannot answer from evidence never becomes a guess: it becomes a named
+**probe** (insert one throwaway row inside a transaction, observe, roll
+back) or the table waits. The census is complete when every question is
+answered or probed — not when every file has been read.
+
 ## Step 3 — Realism plan
 
 Per table, decide what "production-like" means — rules in
@@ -98,6 +117,16 @@ statuses covering the whole enum including the ugly ones (cancelled,
 banned, pending), and **deliberate edge cases** (longest plausible name,
 unicode, empty optionals) — because demos eventually meet them.
 
+**Seed Brief Gate** — before writing a single script, present a compact
+brief in chat: the target database (exactly as confirmed at the
+production gate), per-table row counts, the wipe marker, the demo-account
+roster (role + what each demos), and any side effects that will fire or
+be muted. 10–20 lines total; ask for confirmation **once**. Changing a
+row count here costs one message; changing it after the scripts and
+images exist costs a rewrite. If the user cannot respond, write the
+scripts anyway (files are reversible) — but execution stays behind the
+production gate, which never passes unattended.
+
 ## Step 4 — Write the seed scripts
 
 Use the framework's blessed mechanism — Laravel seeders/factories, Symfony
@@ -106,6 +135,10 @@ resort — cited from the project's own conventions (`file:line` of an
 existing example if one exists). Scripts are committed (`database/seeds/`
 or the stack's home), deterministic where possible (fixed random seed so
 re-runs produce the same demo world), and paired with the unseed script.
+Every insert-time side effect the census found (Census Question 4 —
+observers, signals, callbacks, queued jobs) is handled IN the script:
+muted with the framework's own switch (cite it) or left firing with a
+one-line justification. Silence is not handling.
 
 ## Step 5 — Images and media
 
@@ -120,14 +153,30 @@ config).
 
 ## Step 6 — Run and verify
 
-Run the seed. Then verify like it matters:
+Re-check the target first (the run-time half of the production gate ⛔),
+then prove the pipeline before trusting it with volume — in this order:
 
-- Row counts per table match the plan.
-- FK integrity: zero orphans (query it, don't assume it).
-- **Log in as every demo account** through the app's real auth (HTTP or
-  the app's test client) — a demo account that can't log in is a seed
-  failure, report it as such.
-- Spot-render: one page per major entity shows seeded data without errors.
+1. **Baseline** — record pre-seed row counts per table, and query for
+   rows already matching the wipe marker. That count must be **zero**;
+   if it isn't (and the rows aren't a prior seed run per the manifest),
+   pick a different marker before going on.
+2. **Walking skeleton** — seed exactly ONE row per table through the real
+   seeder (including one image landing in real storage), then check FK
+   integrity and one demo login. The thinnest slice that exercises the
+   whole pipeline.
+3. **Wipe round-trip** — run the unseed script for real against the
+   skeleton. Re-query the counts: every table must equal the baseline.
+   A diff of zero is the proof that "wipeable" is true. Until this
+   passes, mass seeding is forbidden — a wipe that fails on 1 row per
+   table would have failed on thousands.
+4. **Mass seed** — now run the full seed, and verify like it matters:
+   - Row counts per table match the plan.
+   - FK integrity: zero orphans (query it, don't assume it).
+   - **Log in as every demo account** through the app's real auth (HTTP
+     or the app's test client) — a demo account that can't log in is a
+     seed failure, report it as such.
+   - Spot-render: one page per major entity shows seeded data without
+     errors.
 
 ## Step 7 — The manifest
 
