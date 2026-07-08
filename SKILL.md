@@ -87,6 +87,11 @@ love-me-love-my-docs screenshots? a customer demo? dev fixtures?). Then
 run the **production gate** from the hard rules — nothing proceeds past
 this step without the confirmation.
 
+**If no database is reachable** (connection fails, credentials missing),
+stop here: write the seed scripts and manifest template as deliverables,
+but execution cannot proceed — report the blocker and what's needed to
+resolve it (connection string, credentials, network access).
+
 ## Step 2 — Schema census
 
 Read the structure from evidence, per
@@ -191,3 +196,15 @@ out of public repos unless the database is disposable.
 
 End by reporting the manifest inline: what was seeded (counts), the demo
 accounts (user / pass / role), and the one-command re-seed and wipe.
+
+## When things go wrong
+
+| Situation | Response |
+|-----------|----------|
+| **Production gate fails (smells like prod)** | Refuse; suggest local copy or explicit database name confirmation typed back by user |
+| **No database reachable** | Write scripts and manifest template as deliverables; report blocker (connection, credentials, network) — execution cannot proceed |
+| **User cannot respond (headless run)** | Write scripts (reversible) but never execute — production gate cannot pass unattended |
+| **Wipe marker matches existing rows** | Pick different marker before seeding; a marker collision turns wipe into data-loss tool |
+| **Wipe round-trip fails on skeleton** | Fix wipe script before mass seed — a wipe that fails on 1 row/table would fail on thousands |
+| **Demo account login fails after seed** | Report as seed failure; check password hashing config (`file:line`) and policy compliance |
+| **Insert-time side effects discovered** | Mute with framework's own switch (cite) or accept with one-line justification — silence is not handling |
